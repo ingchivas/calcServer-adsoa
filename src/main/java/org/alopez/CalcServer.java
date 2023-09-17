@@ -1,6 +1,7 @@
 package org.alopez;
 import java.net.*;
 import java.io.*;
+import java.util.Arrays;
 
 public class CalcServer {
     private ServerSocket serverSocket;
@@ -55,8 +56,12 @@ class ClientHandler extends Thread {
         try {
             out = new PrintWriter(clientSocket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            EncoderDecoder ed = new EncoderDecoder();
 
             String expression = in.readLine();
+
+            expression = ed.extractOperation(expression.getBytes());
+
             String[] operands = expression.split(" ");
             System.out.println("Received expression: " + expression);
             System.out.printf("Operand 1: %s, Operand 2: %s, Operator: %s%n", operands[0], operands[2], operands[1]);
@@ -82,7 +87,12 @@ class ClientHandler extends Thread {
             }
             System.out.println("Sending result: " + result);
 
-            out.println(result);
+            byte[] encodedResult = ed.encodeResult(String.valueOf(result));
+
+            System.out.println("Encoded result: " + Arrays.toString(encodedResult));
+
+            out.println(new String(encodedResult));
+
         } catch (IOException e) {
             e.printStackTrace();
         } finally {

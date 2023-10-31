@@ -1,18 +1,23 @@
 package org.alopez;
 
-import java.net.*;
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.ConnectException;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class CalcMiddleware2 {
+public class CalcMiddleware3 {
     private Map<String, ServerInfo> serverPorts;
     private Map<String, ServerInfo> otherMiddlewares;
     private List<ClientHandler> clientHandlers;
     private ConcurrentHashMap<String, Integer> seenMessages;
     private final String nodeId = UUID.randomUUID().toString();
 
-    public CalcMiddleware2(Map<String, ServerInfo> serverPorts, Map<String, ServerInfo> otherMiddlewares) {
+    public CalcMiddleware3(Map<String, ServerInfo> serverPorts, Map<String, ServerInfo> otherMiddlewares) {
         this.serverPorts = serverPorts;
         this.otherMiddlewares = otherMiddlewares;
         this.clientHandlers = Collections.synchronizedList(new ArrayList<>());
@@ -209,14 +214,14 @@ public class CalcMiddleware2 {
 
     public static void main(String[] args) {
         Map<String, ServerInfo> serverPorts = new HashMap<>();
-        serverPorts.put("additionServer", new ServerInfo("localhost", 6975));
-        serverPorts.put("subtractionServer", new ServerInfo("localhost", 6978));
-        serverPorts.put("multiplicationServer", new ServerInfo("localhost", 6981));
-        serverPorts.put("divisionServer", new ServerInfo("localhost", 6984));
+        serverPorts.put("additionServer", new ServerInfo("localhost", 6976));
+        serverPorts.put("subtractionServer", new ServerInfo("localhost", 6979));
+        serverPorts.put("multiplicationServer", new ServerInfo("localhost", 6982));
+        serverPorts.put("divisionServer", new ServerInfo("localhost", 6985));
 
         Map<String, ServerInfo> otherMiddlewares = new HashMap<>();
-        CalcMiddleware2 middleware = new CalcMiddleware2(serverPorts, otherMiddlewares);
-        int[] availablePorts = {6420, 6969, 6421};
+        CalcMiddleware3 middleware = new CalcMiddleware3(serverPorts, otherMiddlewares);
+        int[] availablePorts = {6421, 6969, 6420};
 
         middleware.initializeMiddleware(availablePorts);
 

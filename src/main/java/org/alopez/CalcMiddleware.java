@@ -10,6 +10,9 @@ public class CalcMiddleware {
     private Map<String, ServerInfo> otherMiddlewares;
     private List<ClientHandler> clientHandlers;
     private ConcurrentHashMap<String, Integer> seenMessages;
+
+    private List<PrintWriter> clientWriters = Collections.synchronizedList(new ArrayList<>());
+
     private final String nodeId = UUID.randomUUID().toString();
 
     public CalcMiddleware(Map<String, ServerInfo> serverPorts, Map<String, ServerInfo> otherMiddlewares) {
@@ -84,70 +87,81 @@ public class CalcMiddleware {
         private PrintWriter out;
         private BufferedReader in;
 
-        public ClientHandler(Socket socket) {
+        public ClientHandler(Socket socket) throws IOException {
             this.clientSocket = socket;
+            this.out = new PrintWriter(clientSocket.getOutputStream(), true);
+            clientWriters.add(out);
         }
 
         public void run() {
             try {
-                out = new PrintWriter(clientSocket.getOutputStream(), true);
                 in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
-                String rawExpression = in.readLine();
-                String originatingMiddleware = null;  // The middleware that first received the client's request
-
-                if (rawExpression.contains("->")) {
-                    String[] parts = rawExpression.split("->", 2);
-                    originatingMiddleware = parts[0];
-                    rawExpression = parts[1];
-                } else {
-                    originatingMiddleware = nodeId;  // This middleware is the originator
-                }
-
-                String[] operands = rawExpression.split(" ");
-                String operation = operands[1];
-                int[] operationPorts;
-                switch (operation) {
-                    case "+":
-                        operationPorts = new int[]{6970, 6975, 6976, 6977};
-                        break;
-                    case "-":
-                        operationPorts = new int[]{6971, 6978, 6979, 6980};
-                        break;
-                    case "*":
-                        operationPorts = new int[]{6972, 6981, 6982, 6983};
-                        break;
-                    case "/":
-                        operationPorts = new int[]{6973, 6984, 6985, 6986};
-                        break;
-                    default:
-                        out.println("Invalid operation");
-                        return;
-                }
-
-                String localResult = null;
-                for (int port : operationPorts) {
-                    localResult = forwardRequestToOperationServer(rawExpression, port);
-                    if (localResult != null && !localResult.equals("Error forwarding request")) {
+                while (true) {
+                    String rawExpression = in.readLine();
+                    if (rawExpression == null) {
+                        // The client closed the connection
                         break;
                     }
+
+                    String originatingMiddleware = null;  // The middleware that first received the client's request
+
+                    if (rawExpression.contains("->")) {
+                        String[] parts = rawExpression.split("->", 2);
+                        originatingMiddleware = parts[0];
+                        rawExpression = parts[1];
+                    } else {
+                        originatingMiddleware = nodeId;  // This middleware is the originator
+                    }
+
+                    String[] operands = rawExpression.split(" ");
+                    System.out.println("[DEBUG] Received request from NodeID " + nodeId + " - Expression: " + rawExpression);
+                    String operation = operands[1];
+                    int[] operationPorts;
+                    switch (operation) {
+                        case "+":
+                            operationPorts = new int[]{6970, 6975, 6976, 6977};
+                            break;
+                        case "-":
+                            operationPorts = new int[]{6971, 6978, 6979, 6980};
+                            break;
+                        case "*":
+                            operationPorts = new int[]{6972, 6981, 6982, 6983};
+                            break;
+                        case "/":
+                            operationPorts = new int[]{6973, 6984, 6985, 6986};
+                            break;
+                        default:
+                            out.println("Invalid operation");
+                            continue; // Continue listening for the next request
+                    }
+
+                    String localResult = null;
+                    for (int port : operationPorts) {
+                        localResult = forwardRequestToOperationServer(rawExpression, port);
+                        if (localResult != null && !localResult.equals("Error forwarding request")) {
+                            break;
+                        }
+                    }
+
+                    if (nodeId.equals(originatingMiddleware)) {
+                        // This middleware is the original receiver of the client's request
+                        Map<String, String> aggregatedResults = new HashMap<>();
+                        aggregatedResults.put(nodeId, localResult);
+
+                        Map<String, String> otherMiddlewareResults = forwardRequestToOtherMiddlewares(nodeId + "->" + rawExpression);
+
+                        aggregatedResults.putAll(otherMiddlewareResults);
+
+                        String message = aggregatedResults.toString();
+
+                        // Broadcast the results to all connected clients
+                        broadcastToClients(message);
+                    } else {
+                        // For other middlewares, just forward the result to the originator
+                        out.println(nodeId + "=" + localResult);
+                    }
                 }
-
-                if (nodeId.equals(originatingMiddleware)) {
-                    // This middleware is the original receiver of the client's request
-                    Map<String, String> aggregatedResults = new HashMap<>();
-                    aggregatedResults.put(nodeId, localResult);
-
-                    Map<String, String> otherMiddlewareResults = forwardRequestToOtherMiddlewares(nodeId + "->" + rawExpression);
-
-                    aggregatedResults.putAll(otherMiddlewareResults);
-
-                    out.println(aggregatedResults.toString());  // Sending back aggregated results to the client
-                } else {
-                    // For other middlewares, just forward the result to the originator
-                    out.println(nodeId + "=" + localResult);
-                }
-
             } catch (IOException e) {
                 e.printStackTrace();
             } finally {
@@ -155,11 +169,13 @@ public class CalcMiddleware {
                     in.close();
                     out.close();
                     clientSocket.close();
+                    clientWriters.remove(out); // Remove this client's PrintWriter from the list
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
         }
+    }
 
         private String forwardRequestToOperationServer(String expression, int port) {
             try (Socket socket = new Socket("127.0.0.1", port);
@@ -204,7 +220,16 @@ public class CalcMiddleware {
             return results;
         }
 
-    }
+        private void broadcastToClients(String message) {
+            synchronized(clientWriters) {
+                for (PrintWriter writer : clientWriters) {
+                    writer.println(message);
+                }
+            }
+        }
+
+
+
 
 
         public static void main(String[] args) {
@@ -216,7 +241,7 @@ public class CalcMiddleware {
 
             Map<String, ServerInfo> otherMiddlewares = new HashMap<>();
             CalcMiddleware middleware = new CalcMiddleware(serverPorts, otherMiddlewares);
-            int[] availablePorts = {6969, 6420};
+            int[] availablePorts = {6969, 6420, 6421};
 
             middleware.initializeMiddleware(availablePorts);
 

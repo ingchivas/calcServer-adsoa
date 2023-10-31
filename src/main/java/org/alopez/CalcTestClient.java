@@ -1,41 +1,61 @@
 package org.alopez;
-import java.net.*;
+
 import java.io.*;
+import java.net.*;
 
 public class CalcTestClient {
-    private Socket clientSocket;
-    private PrintWriter out;
-    private BufferedReader in;
+    private String serverHost;
+    private int serverPort;
+    private Socket socket;
+    private DataOutputStream out;
+    private DataInputStream in;
+    private EncoderDecoder encoderDecoder;
 
-    public void startConnection(String ip, int port) throws IOException {
-        clientSocket = new Socket(ip, port);
-        out = new PrintWriter(clientSocket.getOutputStream(), true);
-        in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-
+    public CalcTestClient(String serverHost, int serverPort) {
+        this.serverHost = serverHost;
+        this.serverPort = serverPort;
+        this.encoderDecoder = new EncoderDecoder();
     }
 
-    public String sendMessage(String msg) throws IOException {
-        out.println(msg);
-        String response = in.readLine();
-        return response;
+    public void startConnection() throws IOException {
+        socket = new Socket(serverHost, serverPort);
+        out = new DataOutputStream(socket.getOutputStream());
+        in = new DataInputStream(socket.getInputStream());
+    }
+
+    public String sendMessage(byte[] encodedMessage) throws IOException {
+        out.writeInt(encodedMessage.length);  // First send the length of the encoded message
+        out.write(encodedMessage);
+
+        // Read the length of the incoming encoded message
+        int responseLength = in.readInt();
+        byte[] responseBytes = new byte[responseLength];
+        in.readFully(responseBytes);
+
+        return encoderDecoder.decode(responseBytes);
     }
 
     public void stopConnection() throws IOException {
         in.close();
         out.close();
-        clientSocket.close();
+        socket.close();
     }
 
     public static void main(String[] args) {
-        CalcTestClient client = new CalcTestClient();
+        CalcTestClient client = new CalcTestClient("localhost", 6969);
         try {
-            client.startConnection("127.0.0.1", 6969);
-            String response = client.sendMessage("91.1 + 2.1");
-            System.out.println(response);
+            client.startConnection();
+
+            String expression = "2 + 2";
+
+            byte[] encodedMessage = client.encoderDecoder.encodeOperation(expression);
+            String response = client.sendMessage(encodedMessage);
+
+            System.out.println("Response from server: " + response);
+
             client.stopConnection();
         } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
 }

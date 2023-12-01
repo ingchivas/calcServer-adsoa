@@ -248,9 +248,6 @@ public class CalcMiddleware {
         }
 
 
-
-
-
         public static void main(String[] args) {
             Map<String, ServerInfo> serverPorts = new HashMap<>();
             serverPorts.put("additionServer", new ServerInfo("localhost", 6970));

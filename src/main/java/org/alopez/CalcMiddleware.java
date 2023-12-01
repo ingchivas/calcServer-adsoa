@@ -117,7 +117,6 @@ public class CalcMiddleware {
 
                     System.out.println("[DEBUG] Received request from NodeID " + nodeId + " - Decoded Expression: " + rawExpression);
 
-
                     if (rawExpression == null) {
                         // The client closed the connection
                         break;
@@ -224,6 +223,7 @@ public class CalcMiddleware {
                     if (result != null) {
                         System.out.println("[DEBUG] Received result from Middleware at " + middleware.host + ":" + middleware.port + " - Result: " + result);
                         String[] middlewareResults = result.split(",");
+
                         for (String res : middlewareResults) {
                             String[] parts = res.split("=");
                             if (parts.length == 2) {

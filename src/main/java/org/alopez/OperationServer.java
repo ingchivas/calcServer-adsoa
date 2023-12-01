@@ -2,14 +2,18 @@ package org.alopez;
 
 import java.net.*;
 import java.io.*;
+import java.util.Arrays;
 
 public abstract class OperationServer {
     private ServerSocket serverSocket;
 
+    private EncoderDecoder encoderDecoder = new EncoderDecoder();
+
+
     public void start(int port) throws IOException {
         serverSocket = new ServerSocket(port);
         System.out.println("Operation server started on 127.0.0.1:" + port);
-
+        EncoderDecoder encoderDecoder = new EncoderDecoder();
 
         while (true) {
             try {
@@ -19,6 +23,12 @@ public abstract class OperationServer {
                      PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
 
                     String expression = in.readLine();
+//                    String acknowledgementEvent = "Message received";
+//                    byte[] acknowledgementMessage = encoderDecoder.encodeAcknowledgement(acknowledgementEvent);
+//                    out.write(Arrays.toString(acknowledgementMessage));
+
+
+
                     String[] operands = expression.split(" ");
                     double operand1 = Double.parseDouble(operands[0]);
                     double operand2 = Double.parseDouble(operands[2]);
@@ -32,6 +42,8 @@ public abstract class OperationServer {
             }
         }
     }
+
+
 
     public void startOnAvailablePort(int[] ports) {
         for (int port : ports) {

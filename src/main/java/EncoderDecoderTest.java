@@ -10,7 +10,7 @@ public class EncoderDecoderTest {
 
         // Test encoding and decoding an arithmetic operation
         String operation = "6 * 6";
-        String event = "abc";
+        String event = UUID.randomUUID().toString();
         byte[] encodedOperation = encoderDecoder.encodeArithmeticOperation(operation, event);
         System.out.println("Encoded operation: " + Arrays.toString(encodedOperation));
         String decodedOperation = encoderDecoder.decode(encodedOperation);

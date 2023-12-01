@@ -2,6 +2,10 @@ package org.alopez;
 
 import java.net.*;
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -85,7 +89,7 @@ public class CalcMiddleware {
     class ClientHandler extends Thread {
         private Socket clientSocket;
         private PrintWriter out;
-        private BufferedReader in;
+        private InputStream in;
 
         public ClientHandler(Socket socket) throws IOException {
             this.clientSocket = socket;
@@ -95,10 +99,25 @@ public class CalcMiddleware {
 
         public void run() {
             try {
-                in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                in = clientSocket.getInputStream();
 
                 while (true) {
-                    String rawExpression = in.readLine();
+                    ByteBuffer buffer = ByteBuffer.allocate(2048);
+                    ReadableByteChannel channel = Channels.newChannel(in);
+                    int bytesRead = channel.read(buffer);
+                    byte[] rawExpressionBytes = buffer.array();
+
+
+
+                    System.out.println("[DEBUG] Received request from NodeID " + nodeId + " - Raw Expression: " + rawExpressionBytes);
+
+                    // Decode the raw expression assign it to the same variable
+
+                    String rawExpression = EncoderDecoder.extractArithmeticOperation(rawExpressionBytes);
+
+                    System.out.println("[DEBUG] Received request from NodeID " + nodeId + " - Decoded Expression: " + rawExpression);
+
+
                     if (rawExpression == null) {
                         // The client closed the connection
                         break;

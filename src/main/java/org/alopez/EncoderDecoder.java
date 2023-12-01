@@ -5,94 +5,128 @@ import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 
 public class EncoderDecoder {
-
-    // Constants representing service numbers
     private static final short ADDITION_CODE = 1;
     private static final short SUBTRACTION_CODE = 2;
     private static final short MULTIPLICATION_CODE = 3;
     private static final short DIVISION_CODE = 4;
     private static final short RESULT_CODE = 5;
-    private static final short ACKNOWLEDGEMENT_CODE = 99;
-
-    // Fixed sizes for elements
-    private static final int SERVICE_NUMBER_SIZE = 2;
+    private static final short ACKNOWLEDGEMENT_CODE = 100;
+    private static final int OPERATION_TYPE_SIZE = 2;
     private static final int INFO_SIZE = 2;
+    private static final int NUMBER_SIZE = 4;
 
-    // Patterns for validation
-    private static final Pattern OPERATION_PATTERN = Pattern.compile("^\\d+(\\.\\d+)? [+-/*] \\d+(\\.\\d+)?$");
-    private static final Pattern RESULT_PATTERN = Pattern.compile("^\\d+(\\.\\d+)?$");
-
-    public byte[] encodeOperation(String operation) {
-        if (!OPERATION_PATTERN.matcher(operation).matches()) {
-            throw new IllegalArgumentException("Invalid operation: " + operation);
+    public byte[] encodeArithmeticOperation(short operationType, String event, float numberOne, float numberTwo) {
+        if (operationType < ADDITION_CODE || operationType > DIVISION_CODE) {
+            throw new IllegalArgumentException("Invalid operation type for arithmetic operation: " + operationType);
         }
-        return encode(operation, getServiceCode(operation));
+        byte[] eventBytes = event.getBytes(StandardCharsets.UTF_8);
+        ByteBuffer buffer = ByteBuffer.allocate(OPERATION_TYPE_SIZE + INFO_SIZE + eventBytes.length + 2 * NUMBER_SIZE);
+        buffer.putShort(operationType);
+        buffer.putShort((short) eventBytes.length);
+        buffer.put(eventBytes);
+        buffer.putFloat(numberOne);  // putFloat() is used instead of putInt() because the numbers are floats
+        buffer.putFloat(numberTwo);
+        return buffer.array();
     }
 
-    public byte[] encodeAcknowledgement(String acknowledgement) {
-        return encode(acknowledgement, ACKNOWLEDGEMENT_CODE);
+    public byte[] encodeArithmeticOperation(String operation, String event) {
+        String[] parts = operation.split(" ");
+        if (parts.length != 3) {
+            throw new IllegalArgumentException("Invalid operation format: " + operation);
+        }
+        float numberOne = Float.parseFloat(parts[0]);
+        float numberTwo = Float.parseFloat(parts[2]);
+        short operationType;
+        switch (parts[1]) {
+            case "+":
+                operationType = ADDITION_CODE;
+                break;
+            case "-":
+                operationType = SUBTRACTION_CODE;
+                break;
+            case "*":
+                operationType = MULTIPLICATION_CODE;
+                break;
+            case "/":
+                operationType = DIVISION_CODE;
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid operation: " + parts[1]);
+        }
+        return encodeArithmeticOperation(operationType, event, numberOne, numberTwo);
     }
 
-    public byte[] encodeResult(String result) {
-        if (!RESULT_PATTERN.matcher(result).matches()) {
-            throw new IllegalArgumentException("Invalid result: " + result);
+
+    public byte[] encodeAcknowledgement(String event) {
+        byte[] eventBytes = event.getBytes(StandardCharsets.UTF_8);
+        ByteBuffer buffer = ByteBuffer.allocate(OPERATION_TYPE_SIZE + INFO_SIZE + eventBytes.length);
+        buffer.putShort(ACKNOWLEDGEMENT_CODE);
+        buffer.putShort((short) eventBytes.length);
+        buffer.put(eventBytes);
+        return buffer.array();
+    }
+
+    public byte[] encodeResult(String event, int result) {
+        byte[] eventBytes = event.getBytes(StandardCharsets.UTF_8);
+        ByteBuffer buffer = ByteBuffer.allocate(OPERATION_TYPE_SIZE + INFO_SIZE + eventBytes.length + NUMBER_SIZE);
+        buffer.putShort(RESULT_CODE);
+        buffer.putShort((short) eventBytes.length);
+        buffer.put(eventBytes);
+        buffer.putInt(result);
+        return buffer.array();
+    }
+
+    public static String extractArithmeticOperation(byte[] message) {
+        ByteBuffer buffer = ByteBuffer.wrap(message);
+        short operationType = buffer.getShort();
+        if (operationType < ADDITION_CODE || operationType > DIVISION_CODE) {
+            throw new IllegalArgumentException("Invalid operation type for arithmetic operation: " + operationType);
         }
-        return encode(result, RESULT_CODE);
+        short eventSize = buffer.getShort();  // get the event size
+        buffer.position(buffer.position() + eventSize);  // skip over the event bytes
+        float numberOne = buffer.getFloat();
+        float numberTwo = buffer.getFloat();
+        String operator;
+        switch (operationType) {
+            case ADDITION_CODE:
+                operator = "+";
+                break;
+            case SUBTRACTION_CODE:
+                operator = "-";
+                break;
+            case MULTIPLICATION_CODE:
+                operator = "*";
+                break;
+            case DIVISION_CODE:
+                operator = "/";
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid operation type: " + operationType);
+        }
+        return numberOne + " " + operator + " " + numberTwo;
     }
 
     public String decode(byte[] message) {
         ByteBuffer buffer = ByteBuffer.wrap(message);
-        short serviceCode = buffer.getShort();
-        short operationSize = buffer.getShort();
-        byte[] operationBytes = new byte[operationSize];
-        buffer.get(operationBytes);
-        return serviceCode + "|" + new String(operationBytes, StandardCharsets.UTF_8);
-    }
+        short operationType = buffer.getShort();
+        short eventSize = buffer.getShort();
+        byte[] eventBytes = new byte[eventSize];
+        buffer.get(eventBytes);
+        String event = new String(eventBytes, StandardCharsets.UTF_8);
 
-    public short getOperationCode(byte[] message) {
-        ByteBuffer buffer = ByteBuffer.wrap(message);
-        return buffer.getShort();
-    }
-
-    private byte[] encode(String information, short serviceCode) {
-        byte[] informationBytes = information.getBytes(StandardCharsets.UTF_8);
-        ByteBuffer buffer = ByteBuffer.allocate(SERVICE_NUMBER_SIZE + INFO_SIZE + informationBytes.length);
-        buffer.putShort(serviceCode);
-        buffer.putShort((short) informationBytes.length);
-        buffer.put(informationBytes);
-        return buffer.array();
-    }
-
-    public String extractOperation(byte[] message) {
-        ByteBuffer buffer = ByteBuffer.wrap(message);
-        if (buffer.remaining() < SERVICE_NUMBER_SIZE + INFO_SIZE) {
-            throw new IllegalArgumentException("Incomplete message: missing service number or operation size info");
-        }
-        buffer.getShort();  // ignore the serviceCode
-        short operationSize = buffer.getShort();
-
-        if (buffer.remaining() < operationSize) {
-            throw new IllegalArgumentException("Incomplete message: expected " + operationSize + " bytes but got " + buffer.remaining());
-        }
-
-        byte[] operationBytes = new byte[operationSize];
-        buffer.get(operationBytes);
-        return new String(operationBytes, StandardCharsets.UTF_8);
-    }
-
-
-    // Return the corresponding service code based on the operation
-    private short getServiceCode(String operation) {
-        if (operation.contains("+")) {
-            return ADDITION_CODE;
-        } else if (operation.contains("-")) {
-            return SUBTRACTION_CODE;
-        } else if (operation.contains("*")) {
-            return MULTIPLICATION_CODE;
-        } else if (operation.contains("/")) {
-            return DIVISION_CODE;
+        if (operationType >= ADDITION_CODE && operationType <= DIVISION_CODE) {
+            float numberOne = buffer.getFloat();
+            float numberTwo = buffer.getFloat();
+            return operationType + "|" + event + "|" + numberOne + "|" + numberTwo;
+        } else if (operationType == ACKNOWLEDGEMENT_CODE) {
+            return operationType + "|" + event;
+        } else if (operationType == RESULT_CODE) {
+            int result = buffer.getInt();
+            return operationType + "|" + event + "|" + result;
         } else {
-            throw new IllegalArgumentException("Invalid operation: " + operation);
+            throw new IllegalArgumentException("Invalid operation type: " + operationType);
         }
     }
+
+
 }

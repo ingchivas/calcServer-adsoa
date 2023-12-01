@@ -1,14 +1,9 @@
 package org.alopez;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.ConnectException;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.*;
+import java.io.*;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 
 public class CalcMiddleware2 {
     private Map<String, ServerInfo> serverPorts;
@@ -104,6 +99,15 @@ public class CalcMiddleware2 {
 
                 while (true) {
                     String rawExpression = in.readLine();
+
+                    System.out.println("[DEBUG] Received request from NodeID " + nodeId + " - Raw Expression: " + rawExpression);
+
+                    // Decode the raw expression assign it to the same variable
+                    // rawExpression = EncoderDecoder.extractArithmeticOperation(rawExpression.getBytes());
+
+                    System.out.println("[DEBUG] Received request from NodeID " + nodeId + " - Decoded Expression: " + rawExpression);
+
+
                     if (rawExpression == null) {
                         // The client closed the connection
                         break;
@@ -182,56 +186,56 @@ public class CalcMiddleware2 {
         }
     }
 
-        private String forwardRequestToOperationServer(String expression, int port) {
-            try (Socket socket = new Socket("127.0.0.1", port);
+    private String forwardRequestToOperationServer(String expression, int port) {
+        try (Socket socket = new Socket("127.0.0.1", port);
+             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+
+            out.println(expression);
+            return in.readLine();
+        } catch (ConnectException ce) {
+            return null;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return "Error forwarding request";
+        }
+    }
+
+    private Map<String, String> forwardRequestToOtherMiddlewares(String expression) {
+        Map<String, String> results = new HashMap<>();
+        for (ServerInfo middleware : otherMiddlewares.values()) {
+            try (Socket socket = new Socket(middleware.host, middleware.port);
                  PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
                  BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
 
+                System.out.println("[DEBUG] Forwarding request from NodeID " + nodeId + " to Middleware at " + middleware.host + ":" + middleware.port);
                 out.println(expression);
-                return in.readLine();
-            } catch (ConnectException ce) {
-                return null;
-            } catch (IOException e) {
-                e.printStackTrace();
-                return "Error forwarding request";
-            }
-        }
-
-        private Map<String, String> forwardRequestToOtherMiddlewares(String expression) {
-            Map<String, String> results = new HashMap<>();
-            for (ServerInfo middleware : otherMiddlewares.values()) {
-                try (Socket socket = new Socket(middleware.host, middleware.port);
-                     PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
-
-                    System.out.println("[DEBUG] Forwarding request from NodeID " + nodeId + " to Middleware at " + middleware.host + ":" + middleware.port);
-                    out.println(expression);
-                    String result = in.readLine();
-                    if (result != null) {
-                        System.out.println("[DEBUG] Received result from Middleware at " + middleware.host + ":" + middleware.port + " - Result: " + result);
-                        String[] middlewareResults = result.split(",");
-                        for (String res : middlewareResults) {
-                            String[] parts = res.split("=");
-                            if (parts.length == 2) {
-                                results.put(parts[0], parts[1]);
-                            }
+                String result = in.readLine();
+                if (result != null) {
+                    System.out.println("[DEBUG] Received result from Middleware at " + middleware.host + ":" + middleware.port + " - Result: " + result);
+                    String[] middlewareResults = result.split(",");
+                    for (String res : middlewareResults) {
+                        String[] parts = res.split("=");
+                        if (parts.length == 2) {
+                            results.put(parts[0], parts[1]);
                         }
                     }
-                } catch (IOException e) {
-                    System.out.println("[DEBUG] Error forwarding request to Middleware at " + middleware.host + ":" + middleware.port);
-                    e.printStackTrace();
                 }
+            } catch (IOException e) {
+                System.out.println("[DEBUG] Error forwarding request to Middleware at " + middleware.host + ":" + middleware.port);
+                e.printStackTrace();
             }
-            return results;
         }
+        return results;
+    }
 
-        private void broadcastToClients(String message) {
-            synchronized(clientWriters) {
-                for (PrintWriter writer : clientWriters) {
-                    writer.println(message);
-                }
+    private void broadcastToClients(String message) {
+        synchronized(clientWriters) {
+            for (PrintWriter writer : clientWriters) {
+                writer.println(message);
             }
         }
+    }
 
 
 
@@ -239,10 +243,10 @@ public class CalcMiddleware2 {
 
     public static void main(String[] args) {
         Map<String, ServerInfo> serverPorts = new HashMap<>();
-        serverPorts.put("additionServer", new ServerInfo("localhost", 6975));
-        serverPorts.put("subtractionServer", new ServerInfo("localhost", 6978));
-        serverPorts.put("multiplicationServer", new ServerInfo("localhost", 6981));
-        serverPorts.put("divisionServer", new ServerInfo("localhost", 6984));
+        serverPorts.put("additionServer", new ServerInfo("localhost", 6970));
+        serverPorts.put("subtractionServer", new ServerInfo("localhost", 6971));
+        serverPorts.put("multiplicationServer", new ServerInfo("localhost", 6972));
+        serverPorts.put("divisionServer", new ServerInfo("localhost", 6973));
 
         Map<String, ServerInfo> otherMiddlewares = new HashMap<>();
         CalcMiddleware2 middleware = new CalcMiddleware2(serverPorts, otherMiddlewares);
@@ -252,5 +256,5 @@ public class CalcMiddleware2 {
 
 
     }
-    }
+}
 
